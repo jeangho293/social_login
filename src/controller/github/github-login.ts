@@ -3,9 +3,9 @@ import { NextFunction, Request, Response } from 'express';
 
 export class githubLoginController {
   private readonly github = {
-    clientID: '308bbda0128258542ba7',
-    clientSecret: '89a47e99cbca8fcfa45179555aa890bbc1a5917c',
-    redirectURI: 'http://localhost:3000/auth/github/callback'
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    redirectURI: process.env.GITHUB_CALLBACK_URI
   };
 
   public getGithubAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -25,6 +25,7 @@ export class githubLoginController {
       const { code } = req.query;
       const accessTokenURI = `https://github.com/login/oauth/access_token?client_id=${this.github.clientID}&client_secret=${this.github.clientSecret}&code=${code}`;
 
+      // get accessToken
       const accessToken = await axios({
         method: 'POST',
         url: accessTokenURI,
