@@ -6,4 +6,5 @@ const github = new githubLoginController();
 
 router.get('/', github.getGithubAuth);
 router.get('/callback', github.getGithubCallback);
+
 export default router;

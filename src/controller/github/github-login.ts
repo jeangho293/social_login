@@ -1,19 +1,15 @@
-import axios from 'axios';
+import * as Jwt from 'jsonwebtoken';
 import { NextFunction, Request, Response } from 'express';
+import { getCustomRepository } from 'typeorm';
+import { githubUserRepository } from '../../repository/github-user';
+import { githubInfo } from './util/github';
 
 export class githubLoginController {
-  private readonly github = {
-    clientID: process.env.GITHUB_CLIENT_ID,
-    clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    redirectURI: process.env.GITHUB_CALLBACK_URI
-  };
+  private githubInfo = new githubInfo();
 
   public getGithubAuth = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const redirectAuthURI = 'https://github.com/login/oauth/authorize?client_id=' + this.github.clientID
-          + '&redirect_uri=' + this.github.redirectURI; // authorize (접근 허용)을 인가받는 페이지로 이동
-
-      res.redirect(redirectAuthURI);  // 이후 github에 등록한 callback 주소로 이동한다.
+      res.redirect(this.githubInfo.redirectAuthURI);  // 이후 github에 등록한 callback 주소로 이동한다.
     } catch (err) {
       next();
     }
@@ -23,33 +19,34 @@ export class githubLoginController {
   public getGithubCallback = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { code } = req.query;
-      const accessTokenURI = `https://github.com/login/oauth/access_token?client_id=${this.github.clientID}&client_secret=${this.github.clientSecret}&code=${code}`;
 
-      // get accessToken
-      const accessToken = await axios({
-        method: 'POST',
-        url: accessTokenURI,
-        headers: {
-          'content-type': 'application/json'
-        }
-      });
+      // get access token
+      const accessToken = await this.githubInfo.getAccessToken(code);
+      const splitAccessToken: string = accessToken.data.split('&')[0].split('=')[1];
+      const userInformation = await this.githubInfo.getUserInformation(splitAccessToken);
 
-      const splitAccessToken = accessToken.data.split('&')[0].split('=')[1];
-      const userInformation = await axios({
-        method: 'GET',
-        url: 'https://api.github.com/users/jeangho293/repos',
-        headers: {
-          Authorization: `token ${splitAccessToken}`
-        }
-      });
+      // 회원가입에 대한 유무 확인
+      const githubRepository = getCustomRepository(githubUserRepository);
+      const isUser = await githubRepository.findByGithubIndex(userInformation.data.id);
+      const username: string = userInformation.data.login;
+      const userIndex: number = userInformation.data.id;
 
-      // Todo --> 회원가입 또는 로그인일 경우
-      res.cookie('githubToken', splitAccessToken);
-      res.status(200).json({
-        githubToken: splitAccessToken,
-        loginAccessToken: 'token'
-      });
+      if (!isUser) {
+        await githubRepository.createGithub(username, userIndex, splitAccessToken);
+      } else {
+        await githubRepository.updateAccessTokenByGithubIndex(userIndex, splitAccessToken);
+      }
+
+      const [jwtGithubAccessToken, jwtLoginAccessToken]: [string, string] = await Promise.all([
+        Jwt.sign(splitAccessToken, process.env.JWT_SECRET_KEY),
+        Jwt.sign({ username, userIndex }, process.env.JWT_SECRET_KEY)
+      ])
+
+      res.cookie('githubToken', jwtGithubAccessToken);
+      res.cookie('loginAccessToken', jwtLoginAccessToken);
+      res.redirect('http://localhost:3000');
     } catch (err) {
+      console.log(err);
       next();
     }
   };
