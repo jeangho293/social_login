@@ -3,6 +3,7 @@ import * as cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import router from './router';
 import { connectDB } from './entity';
+import { errorHandler, routerError } from './middlewear/error-handler';
 
 class App {
   public app: express.Application = express();
@@ -15,6 +16,8 @@ class App {
 
   private routerHandler() {
     this.app.use('/', router);
+    this.app.use(routerError);  // router error middleware
+    this.app.use(errorHandler); // 404 or 500 error middleware
   }
 
   private MySQL() {
