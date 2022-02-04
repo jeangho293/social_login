@@ -44,7 +44,7 @@ export class githubLoginController {
 
       res.cookie('githubToken', jwtGithubAccessToken);
       res.cookie('loginAccessToken', jwtLoginAccessToken);
-      res.redirect('http://localhost:3000');
+      res.redirect('http://localhost:3000/success');
     } catch (err) {
       console.log(err);
       next();
