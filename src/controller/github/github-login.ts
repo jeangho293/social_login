@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 import { getCustomRepository } from 'typeorm';
 import { githubUserRepository } from '../../repository/github-user';
 import { githubInfo } from './util/github';
+import { refreshTokenModel } from '../../schema/github-refresh';
 
 export class githubLoginController {
   private githubInfo = new githubInfo();
@@ -37,14 +38,21 @@ export class githubLoginController {
         await githubRepository.updateAccessTokenByGithubIndex(userIndex, splitAccessToken);
       }
 
-      const [jwtGithubAccessToken, jwtLoginAccessToken]: [string, string] = await Promise.all([
+      const [jwtGithubAccessToken, jwtLoginAccessToken, jwtLoginRefreshToken] = await Promise.all([
         Jwt.sign(splitAccessToken, process.env.JWT_SECRET_KEY),
-        Jwt.sign({ username, userIndex }, process.env.JWT_SECRET_KEY)
-      ])
+        Jwt.sign({ username, userIndex }, process.env.JWT_SECRET_KEY, { expiresIn: '1800s' }),
+        Jwt.sign({}, process.env.JWT_SECRET_KEY, { expiresIn: '20y' })
+      ]);
 
+      if (!await refreshTokenModel.findOne({ githubIndex: userIndex })) {
+        await refreshTokenModel.create({
+          githubIndex: userIndex,
+          refreshToken: jwtLoginRefreshToken
+        });
+      }
       res.cookie('githubToken', jwtGithubAccessToken);
       res.cookie('loginAccessToken', jwtLoginAccessToken);
-      res.redirect('http://localhost:3000/success');
+      res.redirect('http://localhost:3000');
     } catch (err) {
       console.log(err);
       next();
